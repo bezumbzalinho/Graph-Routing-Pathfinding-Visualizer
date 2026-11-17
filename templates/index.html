@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="eng">
+<head>
+	<title>Portugal cities map</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-KK94CHFLLe+nY2dmCWGMq91rCGa5gtU4mk92HdvYe+M/SXH301p5ILy+dN9+nJOZ" crossorigin="anonymous">
+	<link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
+	<style>
+		body{
+			font-family: 'Poppins', sans-serif;
+		}
+		#mapa {
+			position: relative;
+			display: block;
+			margin: 0 auto;
+		}
+		.caminho {
+			position: absolute;
+		}
+	</style>	
+	<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body style="overflow-y: auto; overflow-x: hidden;">
+	{% block content %}
+	<div class="row mx-5" style="min-height: 100vh;">
+		<div class="col-md-6 d-flex justify-content-center align-items-center flex-column">
+			
+			<h3>Search Methods</h3>
+			
+			<form method="post" class="m-3">
+				<div class="form-group">
+					<select class="form-select mt-4 rounded-pill shadow-sm" name="algorithm" aria-label="Escolha um algoritmo" required>
+						<option selected disabled value="">Choose an algorithm</option>
+						<option value="dfs">DFS</option>
+						<option value="ucs">UCS</option>
+						<option value="gs">GS</option>
+						<option value="gs (pure)">GS (Pure)</option>
+						<option value="a*">A*</option>
+					</select>
+				</div>
+				<div class="form-group">
+					<select class="form-select mt-4 w-100 rounded-pill shadow-sm" name="start" aria-label="Escolha uma cidade Origem" required>
+						<option selected disabled value="">Choose an origin city</option>
+						{% for city in cities %}
+							<option value="{{city}}">{{city}}</option>
+						{% endfor %}
+					</select>
+				</div>
+				<div class="form-group">
+					<select class="form-select mt-4 w-100 rounded-pill shadow-sm" name="end" aria-label="Escolha uma cidade Destino" required>
+						<option selected disabled value="">Choose a destiny city</option>
+						{% for city in cities %}
+							<option value="{{city}}">{{city}}</option>
+						{% endfor %}
+					</select>
+				</div>
+				<div class="form-group d-flex justify-content-center">
+					<div class="form-check form-switch mt-4">
+						<input class="form-check-input" type="checkbox" role="switch" id="flexSwitchCheckDebug" name="debug">
+						<label class="form-check-label" for="flexSwitchCheckDebug">See debug process?</label>
+					</div>
+				</div>
+				<div class="form-group d-flex justify-content-center align-items-center">
+					<button type="submit" class="btn btn-primary rounded-pill shadow-sm w-50 text-center mt-3">GO</button>
+				</div>
+			  </form>
+
+			{% if result %}
+				<p class="text-center">With the <b>{{algorithm}}</b> algorithm:</p>
+				<p class="text-center"><b>Path</b>: {{result.path}}</p>
+				<p class="text-center"><b>Total Distance</b>: {{result.distance}}</p>
+				{% if debug %}
+					<p class="text-center"><b>Debug process:</b></p>
+					<p class="text-center"><b>Path with distances from begin</b>: {{result.path_with_distances}}</p>
+					<div class="accordion" id="accordionExample" style="width: 100%;">
+						<div class="accordion-item">
+						  <h2 class="accordion-header">
+							<button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
+							  Levels
+							</button>
+						  </h2>
+						  <div id="collapseOne" class="accordion-collapse collapse show" data-bs-parent="#accordionExample">
+							<div class="accordion-body">
+								<table id="debugTableLevels" class="table">
+									<thead>
+										<tr>
+											<th>Level</th>
+											<th>Cities</th>
+										</tr>
+									</thead>
+								</table>
+							</div>
+						  </div>
+						</div>
+						<div class="accordion-item">
+							<h2 class="accordion-header">
+							  <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo" aria-expanded="false" aria-controls="collapseTwo">
+								Iterations
+							  </button>
+							</h2>
+							<div id="collapseTwo" class="accordion-collapse collapse" data-bs-parent="#accordionExample">
+							  <div class="accordion-body">
+								<table id="debugTableIterations" class="table">
+									<thead>
+										<tr>
+											<th>Interation</th>
+											<th>Cities with distances from begin</th>
+										</tr>
+									</thead>
+								</table>
+							  </div>
+							</div>
+						  </div>
+					</div>
+				{% endif %}
+			{% endif %}
+
+		</div>
+		<div class="col-md-6">
+			<div id="mapa">
+				<img class="caminho" width="350" src="https://upload.wikimedia.org/wikipedia/commons/7/79/Mapa_de_Portugal_-_Distritos_plain.png" alt="Mapa">
+				<canvas class="caminho" id="map-canvas" width="350" height="640"> </canvas>
+			</div>
+		</div>
+	</div>
+	<script type="text/javascript">
+		
+		document.querySelector("select[name=algorithm]").addEventListener("change", (e) => {
+			e.preventDefault()
+			const attribute = document.querySelector("select[name=end]")
+			if(["a*", "gs (pure)", "gs"].includes(e.target.value)) {
+				attribute.style.display = "none"
+				attribute.removeAttribute('required');
+			} else {
+				attribute.style.display = "block"
+				attribute.setAttribute('required', '');
+			}
+			attribute.value = ""
+		})
+
+		// Define as coordenadas das 18 cidades
+		const cities = [
+			{name: "Viana do Castelo", x: 100, y: 50},
+			{name: "Braga", x: 120, y: 80},
+			{name: "Vila Real", x: 180, y: 100},
+			{name: "Braganca", x: 280, y: 50},
+			{name: "Porto", x: 110, y: 120},
+			{name: "Aveiro", x: 100, y: 180},
+			{name: "Viseu", x: 160, y: 190},
+			{name: "Guarda", x: 215, y: 190},
+			{name: "Coimbra", x: 100, y: 240},
+			{name: "Castelo Branco", x: 160, y: 280},
+			{name: "Leiria", x: 80, y: 280},
+			{name: "Santarem", x: 80, y: 340},
+			{name: "Portalegre", x: 170, y: 350},
+			{name: "Lisboa", x: 40, y: 400},
+			{name: "Evora", x: 170, y: 430},
+			{name: "Setubal", x: 65, y: 435},
+			{name: "Beja", x: 170, y: 500},
+			{name: "Faro", x: 170, y: 620}
+		];
+
+		// Obtém o elemento canvas do HTML
+		const canvas = document.getElementById("map-canvas");
+
+		// Cria o contexto de desenho no canvas
+		const ctx = canvas.getContext("2d");
+
+		let list_path = [];
+		{% for item in result.path %}
+			list_path.push('{{item}}')
+		{% endfor %}
+
+		// Desenha um círculo para cada cidade
+		const drawCities = async () => {
+			for (let i = 0; i < cities.length; i++) {
+				let city = cities[i];
+				ctx.beginPath();
+				ctx.arc(city.x, city.y, 5, 0, 2 * Math.PI);
+				if(cities[i].name === list_path[0]) ctx.fillStyle = "#32a852";
+				else if(cities[i].name === list_path[list_path.length - 1]) ctx.fillStyle = "#bf0f27";
+				else ctx.fillStyle = "#000";
+				ctx.fill();
+				ctx.globalCompositeOperation = 'destination-over';
+				ctx.closePath();
+				ctx.font = "bold 12px Poppins";
+				ctx.fillText(city.name, city.x + 10, city.y + 3);
+			}
+		}
+
+		const drawLines = async () => {
+			ctx.beginPath();
+			
+			for(let i = 0, index_list_path = 0; index_list_path < list_path.length ; i++){
+				if(cities[i].name == list_path[index_list_path]) {
+					if(index_list_path !== 0) ctx.lineTo(cities[i].x, cities[i].y);
+					else ctx.moveTo(cities[i].x, cities[i].y);
+					index_list_path++;
+					ctx.strokeStyle = "#FF0000";
+					ctx.stroke();
+					//await timer(50); // then the created Promise can be awaited
+				}
+				if(i === cities.length - 1) i = -1
+			}
+	
+			ctx.closePath();
+		}
+
+		drawCities()
+
+		{% if result %}
+			// Desenha o caminho entre as cidades
+			drawLines()
+		{% endif %}
+
+		{% if debug %}
+			let count = 0;
+			let tabel = "<tbody>";
+			let string = "";
+			{% for item, value in result.levels.items() %}
+				{% for v in value %}
+					string += "{{v}}, "
+				{% endfor %}
+				tabel += "<tr><th>"+ count++ +"</th><td>"+string.substring(0,string.length-2)+"</td></tr>"
+				string = ""
+			{% endfor %}
+			document.getElementById("debugTableLevels").innerHTML += tabel + "</tbody>"
+			count = 0;
+			tabel = "<tbody>";
+			{% for item, value in result.iteractions.items() %}
+				{% for v in value %}
+					string += "{{v}}, "
+				{% endfor %}
+				tabel += "<tr><th>"+ count++ +"</th><td>"+string+"</td></tr>"
+				string = ""
+			{% endfor %}
+			document.getElementById("debugTableIterations").innerHTML += tabel + "</tbody>"
+		{% endif %}
+
+		{% if error %}
+			Swal.fire({
+				icon: 'error',
+				title: 'Oops...',
+				text: "{{error}}",
+			})
+		{% endif %}
+	</script>
+	{% endblock %}
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ENjdO4Dr2bkBIFxQpeoTz1HIcje39Wm4jDKdf19U8gI4ddQ3GYNS7NTKfAdVQSZe" crossorigin="anonymous"></script>
+</body>
+</html>
